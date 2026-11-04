@@ -37,7 +37,15 @@ header.top h1 { font: 700 26px/1 "Barlow Condensed", "Arial Narrow", sans-serif;
 header.top .meta { color: var(--muted); }
 header.top .meta b { color: var(--ink); font-weight: 600; }
 
-.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px 12px; display: grid; gap: 10px; }
+.bar-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.panel { border-bottom: 1px solid var(--line); padding: 10px 16px 12px; display: grid; gap: 10px; background: var(--bg); }
+.filters-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; white-space: nowrap; }
+.filters-btn .badge { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 600; text-align: center; line-height: 18px; }
+.filters-btn .badge:empty { display: none; }
+.filters-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.active-summary { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.active-summary:empty { display: none; }
+.active-summary .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--chip-on); color: var(--chip-on-ink); cursor: pointer; border: 0; font: inherit; font-size: 12px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .row label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 500; }
 .search { flex: 1 1 220px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
@@ -47,7 +55,10 @@ select, .row input[type=number] { padding: 7px 10px; border: 1px solid var(--lin
 .row input[type=range] { width: 140px; accent-color: var(--accent); }
 .group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips .chip.overflow { display: none; }
+.chips.expanded .chip.overflow { display: inline-block; }
 .chip { border: 0; border-radius: 999px; padding: 5px 11px; background: var(--chip); cursor: pointer; line-height: 1.2; }
+.chip.more { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
 .chip small { color: var(--muted); margin-left: 4px; }
 .chip.on { background: var(--chip-on); color: var(--chip-on-ink); }
 .chip.on small { color: inherit; opacity: .7; }
@@ -93,7 +104,14 @@ main { padding: 14px 16px 0; }
 .rank { position: absolute; top: 8px; left: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 13px; padding: 2px 8px; border-radius: 6px; }
 .more-btn { display: block; margin: 20px auto 0; padding: 10px 22px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; }
 .empty { color: var(--muted); padding: 40px 0; text-align: center; }
-@media (max-width: 480px) { .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; } .price .allin { font-size: 24px; } .row input[type=range] { width: 100px; } }
+@media (max-width: 600px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .price .allin { font-size: 24px; }
+  .row input[type=range] { width: 100px; }
+  header.top { padding: 12px 16px 6px; } header.top h1 { font-size: 22px; }
+  .search { flex-basis: 100%; }
+  .bar-top .count { margin-left: 0; }
+}
 @media (prefers-reduced-motion: no-preference) { .chip, .toggle { transition: background .12s, color .12s; } }
 </style>
 </head>
@@ -103,9 +121,14 @@ main { padding: 14px 16px 0; }
   <div class="meta" id="meta"></div>
 </header>
 
-<div class="bar">
+<div class="bar-top">
+  <input class="search" id="q" type="search" placeholder="Search titles (e.g. dining table, Safavieh, leather)" autocomplete="off">
+  <button class="filters-btn" id="filtersBtn" type="button" aria-expanded="false" aria-controls="panel">Filters <span class="badge" id="filtersBadge"></span></button>
+  <span class="count" id="count"></span>
+  <div class="active-summary" id="activeSummary"></div>
+</div>
+<div class="panel" id="panel" hidden>
   <div class="row">
-    <input class="search" id="q" type="search" placeholder="Search titles (e.g. dining table, Safavieh, leather)" autocomplete="off">
     <label class="toggle" id="dealsWrap"><input type="checkbox" id="deals"> Top deals only</label>
     <label for="sort">Sort</label>
     <select id="sort">
@@ -118,7 +141,6 @@ main { padding: 14px 16px 0; }
       <option value="bids">Fewest bids</option>
       <option value="lot">Lot number</option>
     </select>
-    <span class="count" id="count"></span>
   </div>
   <div class="row"><label>Type</label><div class="chips" id="types"></div></div>
   <div class="row"><label>Room</label><div class="chips" id="rooms"></div></div>
@@ -174,21 +196,62 @@ const LOTS = [{"rank": 1, "score": 99.8, "is_deal": true, "type": "accent chair"
   // header
   $("meta").innerHTML = `<b>${esc(META.event)}</b> · closes ${esc(closesText(META.closes) || META.closes)} · pulled ${esc(META.generated)} · <b>${LOTS.length.toLocaleString()}</b> lots with an MSRP · all-in = next bid + ${META.premium}% premium + $${META.fee} fee`;
 
-  // chip groups
-  function buildChips(id, key, selected) {
+  // chip groups (types show the 12 most common, the rest behind "+N more")
+  function buildChips(id, key, selected, limit) {
     const counts = {};
     LOTS.forEach(l => (Array.isArray(l[key]) ? l[key] : [l[key]]).forEach(v => { if (v) counts[v] = (counts[v] || 0) + 1; }));
     const names = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-    const box = $(id); box.innerHTML = "";
-    names.forEach(n => {
-      const b = document.createElement("button"); b.type = "button"; b.className = "chip" + (selected.has(n) ? " on" : "");
+    const box = $(id); box.innerHTML = ""; box.classList.remove("expanded");
+    let hidden = 0;
+    names.forEach((n, i) => {
+      const b = document.createElement("button"); b.type = "button";
+      const overflow = limit && i >= limit && !selected.has(n);
+      if (overflow) hidden++;
+      b.className = "chip" + (selected.has(n) ? " on" : "") + (overflow ? " overflow" : "");
       b.innerHTML = `${esc(n)}<small>${counts[n]}</small>`; b.dataset.v = n;
       b.addEventListener("click", () => { selected.has(n) ? selected.delete(n) : selected.add(n); b.classList.toggle("on"); state.shown = PAGE; render(); });
       box.appendChild(b);
     });
+    if (hidden) {
+      const m = document.createElement("button"); m.type = "button"; m.className = "chip more"; m.textContent = `+${hidden} more`;
+      m.addEventListener("click", () => { const open = box.classList.toggle("expanded"); m.textContent = open ? "show fewer" : `+${hidden} more`; });
+      box.appendChild(m);
+    }
   }
-  buildChips("types", "type", state.types);
-  buildChips("rooms", "rooms", state.rooms);
+  function buildAllChips() { buildChips("types", "type", state.types, 12); buildChips("rooms", "rooms", state.rooms, 0); }
+  buildAllChips();
+
+  // filters panel: open on wide screens, closed on phones
+  const panel = $("panel"), fbtn = $("filtersBtn");
+  function setPanel(open) { panel.hidden = !open; fbtn.setAttribute("aria-expanded", String(open)); }
+  setPanel(window.innerWidth >= 900);
+  fbtn.addEventListener("click", () => setPanel(panel.hidden));
+
+  function activeFilters() {
+    const a = [];
+    if (state.deals) a.push({ label: "top deals", clear: () => { state.deals = false; $("deals").checked = false; } });
+    state.types.forEach(t => a.push({ label: t, clear: () => state.types.delete(t) }));
+    state.rooms.forEach(r => a.push({ label: r, clear: () => state.rooms.delete(r) }));
+    if (state.minoff > 0) a.push({ label: `≥ ${state.minoff}% off`, clear: () => { state.minoff = 0; $("minoff").value = 0; } });
+    if (state.maxallin !== "") a.push({ label: `≤ $${state.maxallin} all-in`, clear: () => { state.maxallin = ""; $("maxallin").value = ""; } });
+    if (state.minmsrp !== "") a.push({ label: `MSRP ≥ $${state.minmsrp}`, clear: () => { state.minmsrp = ""; $("minmsrp").value = ""; } });
+    if (state.maxbids !== "") a.push({ label: `≤ ${state.maxbids} bids`, clear: () => { state.maxbids = ""; $("maxbids").value = ""; } });
+    if (state.cond) a.push({ label: state.cond === "ok" ? "undamaged" : "has condition", clear: () => { state.cond = ""; $("cond").value = ""; } });
+    return a;
+  }
+  function renderSummary() {
+    const a = activeFilters();
+    $("filtersBadge").textContent = a.length ? String(a.length) : "";
+    const box = $("activeSummary"); box.innerHTML = "";
+    if (!a.length || !panel.hidden) return;
+    a.forEach(f => {
+      const p = document.createElement("button"); p.type = "button"; p.className = "pill"; p.innerHTML = `${esc(f.label)} <span aria-hidden="true">×</span>`;
+      p.title = "Remove this filter";
+      p.addEventListener("click", () => { f.clear(); buildAllChips(); state.shown = PAGE; render(); });
+      box.appendChild(p);
+    });
+  }
+  fbtn.addEventListener("click", renderSummary);
 
   // controls
   $("q").value = state.q; $("deals").checked = state.deals; $("sort").value = state.sort;
@@ -200,7 +263,7 @@ const LOTS = [{"rank": 1, "score": 99.8, "is_deal": true, "type": "accent chair"
   $("reset").addEventListener("click", () => {
     Object.assign(state, { q: "", deals: false, sort: "score", minoff: 0, maxallin: "", minmsrp: "", maxbids: "", cond: "", shown: PAGE }); state.types.clear(); state.rooms.clear();
     $("q").value = ""; $("deals").checked = false; $("sort").value = "score"; $("minoff").value = 0; $("maxallin").value = ""; $("minmsrp").value = ""; $("maxbids").value = ""; $("cond").value = "";
-    document.querySelectorAll(".chip.on").forEach(c => c.classList.remove("on")); render();
+    buildAllChips(); render();
   });
   $("more").addEventListener("click", () => { state.shown += PAGE; render(true); });
 
@@ -249,6 +312,7 @@ const LOTS = [{"rank": 1, "score": 99.8, "is_deal": true, "type": "accent chair"
     $("count").innerHTML = `<b>${rows.length.toLocaleString()}</b> of ${LOTS.length.toLocaleString()}`;
     $("minoffv").textContent = state.minoff + "%";
     $("dealsWrap").classList.toggle("on", state.deals);
+    renderSummary();
     const slice = rows.slice(0, state.shown);
     $("grid").innerHTML = slice.map(card).join("");
     $("empty").hidden = rows.length > 0;
